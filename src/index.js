@@ -47,13 +47,13 @@ const createGetter = (prototype, key, FieldType) => {
       const getter = getGetter(prototype, key);
       return function get() {
         const list = getter.call(this);
-        return list && list.map(FieldItemType);
+        return list && list.map(FieldItemType.bind(this));
       };
     }
 
     return function get() {
       const list = this._data[key];
-      return list && list.map(FieldItemType);
+      return list && list.map(FieldItemType.bind(this));
     };
   }
 
@@ -77,12 +77,12 @@ const createGetter = (prototype, key, FieldType) => {
     if (key in prototype) {
       const getter = getGetter(prototype, key);
       return function get() {
-        return FieldType(getter.call(this));
+        return FieldType.call(this, getter.call(this));
       };
     }
 
     return function get() {
-      return FieldType(this._data[key]);
+      return FieldType.call(this, this._data[key]);
     };
   }
 

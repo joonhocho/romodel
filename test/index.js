@@ -305,6 +305,12 @@ describe('Model', () => {
         bools: [Boolean],
         serialized: JSON.stringify,
         unserialized: JSON.parse,
+        bool2: function(bool2) {
+          return [this.bool, Boolean(bool2)];
+        },
+        bools2: function(bools2) {
+          return this.bools.concat(bools2.map(Boolean));
+        },
       },
     });
 
@@ -323,6 +329,9 @@ describe('Model', () => {
     expect(() => new Simple({}).unserialized).to.throw();
     expect(new Simple({unserialized: null}).unserialized).to.eql(null);
     expect(new Simple({unserialized: JSON.stringify({'a': 1})}).unserialized).to.eql({'a': 1});
+
+    expect(new Simple({bool: 1, bool2: 0}).bool2).to.eql([true, false]);
+    expect(new Simple({bools: [1, 0], bools2: [0, 1]}).bools2).to.eql([true, false, false, true]);
   });
 
 
