@@ -6,6 +6,7 @@ import {
   inheritClass,
 } from './util';
 
+const createCleanObject = () => Object.create(null);
 
 const createSetter = (key) => function set(value) {
   this._data[key] = value;
@@ -20,86 +21,132 @@ const getGetter = (obj, key) => {
   return get;
 }
 
-let models = {};
+let models = createCleanObject();
 
 const getModel = (model) => typeof model === 'string' ? models[model] : model;
 
-const createGetter = (prototype, key, FieldType) => {
-  if (Array.isArray(FieldType)) {
-    // [Model]
-    const FieldItemType = FieldType[0];
-    if (FieldItemType.isModel || typeof FieldItemType === 'string') {
-      if (key in prototype) {
-        const getter = getGetter(prototype, key);
-        return function get() {
-          const {_cache: c} = this;
-          return c[key] || (c[key] = this.$createChildren(FieldItemType, getter.call(this)));
+const createChildModel = (parent, Class, data) => new Class(data, parent, parent._root, parent._context);
+
+const bypass = (x) => x;
+const block = () => undefined;
+
+const normalizeFieldMappingFns = (fns) => {
+  return (Array.isArray(fns) ? fns : [fns]).map((fn) => {
+    switch (typeof fn) {
+    case 'boolean':
+      return fn ? bypass : block;
+    case 'string':
+      return models[fn] || fn;
+    case 'function':
+      return fn;
+    default:
+      console.error(fn);
+      throw new Error('Invalid field transform function!');
+    }
+  }).filter((x) => x);
+};
+
+const createModelMapFn = (Class) => function(data) {
+  return data && createChildModel(this, Class, data);
+};
+
+const createGetter = (prototype, key, fieldMappingFns) => {
+  if (fieldMappingFns == null) {
+    throw new Error('Invalid field transform function!');
+  }
+
+  const getter = key in prototype ?
+      getGetter(prototype, key) :
+      function() { return this._data[key] };
+
+  let fns = fieldMappingFns, isList = false;
+  if (fns instanceof FieldType) {
+    isList = fns.type === 'list';
+    fns = fns.ofType;
+  }
+  fns = normalizeFieldMappingFns(fns);
+
+  if (!fns.length) {
+    // No mapping functions.
+    return getter;
+  }
+
+  let mapFn;
+  if (fns.length === 1) {
+    // One mapping function.
+    let fn = fns[0];
+    if (fn.isModel) {
+      mapFn = createModelMapFn(fn);
+    } else if (typeof fn === 'string') {
+      mapFn = function(data) {
+        if (!models[fn]) {
+          throw new Error(`Unknown field model. model='${fn}'`);
+        }
+        mapFn = createModelMapFn(models[fn]);
+        return mapFn.call(this, data);
+      };
+    } else {
+      mapFn = fn;
+    }
+  } else {
+    // Multiple mapping function.
+    fns = fns.map((fn, i) => {
+      if (fn.isModel) {
+        return createModelMapFn(fn);
+      }
+      if (typeof fn === 'string') {
+        return function(data) {
+          if (!models[fn]) {
+            throw new Error(`Unknown field model. model='${fn}'`);
+          }
+          fn = fns[i] = createModelMapFn(models[fn]);
+          return fn.call(this, data);
         };
       }
-
-      return function get() {
-        const {_cache: c} = this;
-        return c[key] || (c[key] = this.$createChildren(FieldItemType, this._data[key]));
-      };
-    }
-
-    if (key in prototype) {
-      const getter = getGetter(prototype, key);
-      return function get() {
-        const list = getter.call(this);
-        return list && list.map(FieldItemType.bind(this));
-      };
-    }
-
-    return function get() {
-      const list = this._data[key];
-      return list && list.map(FieldItemType.bind(this));
+      return fn;
+    });
+    mapFn = function(data) {
+      return fns.reduce((x, fn) => fn.call(this, x), data);
     };
   }
 
-  if (FieldType.isModel || typeof FieldType === 'string') {
-    // Model
-    if (key in prototype) {
-      const getter = getGetter(prototype, key);
-      return function get() {
-        const {_cache: c} = this;
-        return c[key] || (c[key] = this.$createChild(FieldType, getter.call(this)));
-      };
-    }
-
+  if (isList) {
+    // List type field.
     return function get() {
       const {_cache: c} = this;
-      return c[key] || (c[key] = this.$createChild(FieldType, this._data[key]));
+      if (!(key in c)) {
+        const val = getter.call(this);
+        c[key] = val && val.map(mapFn, this);
+      }
+      return c[key];
     };
-  }
-
-  if (typeof FieldType === 'function') {
-    if (key in prototype) {
-      const getter = getGetter(prototype, key);
-      return function get() {
-        return FieldType.call(this, getter.call(this));
-      };
-    }
-
+  } else {
+    // Non-list type field.
     return function get() {
-      return FieldType.call(this, this._data[key]);
-    };
-  }
-
-  if (FieldType) {
-    // Value
-    return function get() {
-      return this._data[key];
+      const {_cache: c} = this;
+      if (!(key in c)) {
+        c[key] = mapFn.call(this, getter.call(this));
+      }
+      return c[key];
     };
   }
 };
 
+class FieldType {
+  constructor({type, ofType}) {
+    this.type = type;
+    this.ofType = ofType;
+  }
+}
+
 
 export default class Model {
+  static list = (x) => new FieldType({type: 'list', ofType: x})
+
   static create(Class, {
     base: Base = Model,
     interfaces = [],
-    fields = {},
+    fields = createCleanObject(),
   } = {}) {
     const NewModel = class extends Base {};
 
@@ -128,7 +175,7 @@ export default class Model {
 
   static get = getModel
 
-  static clear() { models = {}; }
+  static clear() { models = createCleanObject(); }
 
 
   constructor(data, parent, root, context = null) {
@@ -178,11 +225,12 @@ export default class Model {
   }
 
   $createChild(model, data) {
-    return new (getModel(model))(data, this, this._root, this._context);
+    return createChildModel(this, getModel(model), data);
   }
 
   $createChildren(model, dataList) {
-    return dataList && dataList.map((data) => this.$createChild(model, data));
+    const Class = getModel(model);
+    return dataList && dataList.map((data) => createChildModel(this, Class, data));
   }
 
   $clearCache(key) {

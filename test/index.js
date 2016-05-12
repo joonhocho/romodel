@@ -162,7 +162,7 @@ describe('Model', () => {
       fields: {
         // declare 'child' field as 'ChildModel'.
         child: ChildModel,
-        children: [ChildModel],
+        children: Model.list(ChildModel),
       },
     });
 
@@ -256,13 +256,28 @@ describe('Model', () => {
     const Present = Model.create(class Present {}, {
       fields: {
         child: 'Future',
+        children: Model.list([(x) => x, 'Future', (x) => x]),
       },
     });
 
     const Future = Model.create(class Future {});
 
-    const parent = new Present({child: {}});
+    let parent = new Present({child: {}});
     expect(parent.child).to.be.an.instanceof(Future);
+
+    // repeat
+    parent = new Present({child: {}});
+    expect(parent.child).to.be.an.instanceof(Future);
+
+    // children
+    parent = new Present({children: [{}, {}]});
+    expect(parent.children[0]).to.be.an.instanceof(Future);
+    expect(parent.children[1]).to.be.an.instanceof(Future);
+
+    // children repeat
+    parent = new Present({children: [{}, {}]});
+    expect(parent.children[0]).to.be.an.instanceof(Future);
+    expect(parent.children[1]).to.be.an.instanceof(Future);
   });
 
 
@@ -278,7 +293,7 @@ describe('Model', () => {
       fields: {
         childId: true,
         child: 'Child',
-        children: ['Child'],
+        children: Model.list('Child'),
       },
     });
 
@@ -302,7 +317,7 @@ describe('Model', () => {
     const Simple = Model.create(class Simple {}, {
       fields: {
         bool: Boolean,
-        bools: [Boolean],
+        bools: Model.list(Boolean),
         serialized: JSON.stringify,
         unserialized: JSON.parse,
         bool2: function(bool2) {
@@ -380,7 +395,7 @@ describe('Model', () => {
     // Create a Profile model
     const Profile = Model.create(class Profile {}, {
       fields: {
-        names: [NameModel],
+        names: Model.list(NameModel),
       },
     });
 
