@@ -1,6 +1,6 @@
 {
   "name": "romodel",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "RoModel is a simple, lightweight, unopinionated, read-only, immutable, model based data access library",
   "main": "lib/index.js",
   "directories": {

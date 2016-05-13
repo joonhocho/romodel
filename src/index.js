@@ -6,6 +6,8 @@ import {
   inheritClass,
 } from './util';
 
+const SIGNATURE = {};
+
 const createCleanObject = () => Object.create(null);
 
 const createSetter = (key) => function set(value) {
@@ -75,7 +77,7 @@ const createGetter = (prototype, key, fieldMappingFns) => {
   if (fns.length === 1) {
     // One mapping function.
     let fn = fns[0];
-    if (fn.isModel) {
+    if (fn.$signature === SIGNATURE) {
       mapFn = createModelMapFn(fn);
     } else if (typeof fn === 'string') {
       mapFn = function(data) {
@@ -91,7 +93,7 @@ const createGetter = (prototype, key, fieldMappingFns) => {
   } else {
     // Multiple mapping function.
     fns = fns.map((fn, i) => {
-      if (fn.isModel) {
+      if (fn.$signature === SIGNATURE) {
         return createModelMapFn(fn);
       }
       if (typeof fn === 'string') {
@@ -157,9 +159,9 @@ export default class Model {
     models[name] = NewModel;
 
     defineClassName(NewModel, name);
-    defineStatic(NewModel, 'isModel', true);
-    defineStatic(NewModel, 'fields', fields);
-    defineStatic(NewModel, 'interfaces', interfaces);
+    defineStatic(NewModel, '$signature', SIGNATURE);
+    defineStatic(NewModel, '$fields', fields);
+    defineStatic(NewModel, '$interfaces', interfaces);
 
     [Class, Base].concat(interfaces).forEach((from) =>
         inheritClass(NewModel, from));
@@ -242,6 +244,6 @@ export default class Model {
   }
 
   $implements(Type) {
-    return this.constructor.interfaces.indexOf(Type) >= 0;
+    return this.constructor.$interfaces.indexOf(Type) >= 0;
   }
 }
