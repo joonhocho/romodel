@@ -142,44 +142,47 @@ class FieldType {
 }
 
 
-export default class Model {
-  static list = (x) => new FieldType({type: 'list', ofType: x})
+export const list = (x) => new FieldType({type: 'list', ofType: x});
 
-  static create(Class, {
-    base: Base = Model,
-    interfaces = [],
-    fields = createCleanObject(),
-  } = {}) {
-    const NewModel = class extends Base {};
 
-    const {name} = Class;
-    if (models[name]) {
-      throw new Error(`'${name}' model already exists!`);
-    }
-    models[name] = NewModel;
+export const create = (Class, {
+  base: Base = Model,
+  interfaces = [],
+  fields = createCleanObject(),
+} = {}) => {
+  const NewModel = class extends Base {};
 
-    defineClassName(NewModel, name);
-    defineStatic(NewModel, '$signature', SIGNATURE);
-    defineStatic(NewModel, '$fields', fields);
-    defineStatic(NewModel, '$interfaces', interfaces);
-
-    [Class, Base].concat(interfaces).forEach((from) =>
-        inheritClass(NewModel, from));
-
-    forEach(fields, (type, key) => defineGetterSetter(
-      NewModel.prototype, key,
-      createGetter(NewModel.prototype, key, type),
-      createSetter(key)
-    ));
-
-    return NewModel;
+  const {name} = Class;
+  if (models[name]) {
+    throw new Error(`'${name}' model already exists!`);
   }
+  models[name] = NewModel;
 
-  static get = getModel
+  defineClassName(NewModel, name);
+  defineStatic(NewModel, '$signature', SIGNATURE);
+  defineStatic(NewModel, '$fields', fields);
+  defineStatic(NewModel, '$interfaces', interfaces);
 
-  static clear() { models = createCleanObject(); }
+  [Class, Base].concat(interfaces).forEach((from) =>
+      inheritClass(NewModel, from));
+
+  forEach(fields, (type, key) => defineGetterSetter(
+    NewModel.prototype, key,
+    createGetter(NewModel.prototype, key, type),
+    createSetter(key)
+  ));
+
+  return NewModel;
+};
 
 
+export const get = getModel;
+
+
+export const clear = () => { models = createCleanObject(); };
+
+
+export class Model {
   constructor(data, parent, root, context = null) {
     this._data = data;
     this._parent = parent || null;
@@ -247,3 +250,12 @@ export default class Model {
     return this.constructor.$interfaces.indexOf(Type) >= 0;
   }
 }
+
+
+export default {
+  list,
+  create,
+  get,
+  clear,
+  Model,
+};

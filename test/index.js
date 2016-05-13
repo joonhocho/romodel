@@ -1,14 +1,14 @@
 import chai, {expect} from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 chai.use(chaiAsPromised);
-import Model from '../lib';
+import {create, clear, list} from '../lib';
 
 describe('Model', () => {
-  afterEach(() => Model.clear());
+  afterEach(() => clear());
 
 
   it('Basic', () => {
-    const MyModel = Model.create(class MyModel {
+    const MyModel = create(class MyModel {
       // define a class method.
       getId() { return this.id; }
     }, {
@@ -42,7 +42,7 @@ describe('Model', () => {
 
 
   it('Class Methods / Getters / Static', () => {
-    const Plus = Model.create(class Plus {
+    const Plus = create(class Plus {
       // static
       static plus1(obj) { return obj.value + 1; }
 
@@ -68,7 +68,7 @@ describe('Model', () => {
 
 
   it('Class Inheritance', () => {
-    const ShapeModel = Model.create(class Shape {
+    const ShapeModel = create(class Shape {
       // a static method
       static isShape(obj) { return obj instanceof ShapeModel; }
 
@@ -86,7 +86,7 @@ describe('Model', () => {
       },
     });
 
-    const ShapeWithColorModel = Model.create(class ShapeWithColor {
+    const ShapeWithColorModel = create(class ShapeWithColor {
       // add a static property
       static isShapeWithColor(obj) { return obj instanceof ShapeWithColorModel; }
 
@@ -149,7 +149,7 @@ describe('Model', () => {
 
 
   it('Parent / Child', () => {
-    const ChildModel = Model.create(class ChildModel {
+    const ChildModel = create(class ChildModel {
       getName() { return this.name; }
     }, {
       fields: {
@@ -157,12 +157,12 @@ describe('Model', () => {
       },
     });
 
-    const ParentModel = Model.create(class ParentModel {
+    const ParentModel = create(class ParentModel {
     }, {
       fields: {
         // declare 'child' field as 'ChildModel'.
         child: ChildModel,
-        children: Model.list(ChildModel),
+        children: list(ChildModel),
       },
     });
 
@@ -185,20 +185,20 @@ describe('Model', () => {
 
 
   it('can pass down optional context', () => {
-    const GrandChild = Model.create(class GrandChild {}, {
+    const GrandChild = create(class GrandChild {}, {
       fields: {
         id: true,
       },
     });
 
-    const Child = Model.create(class Child {}, {
+    const Child = create(class Child {}, {
       fields: {
         id: true,
         child: GrandChild,
       },
     });
 
-    const Parent = Model.create(class Parent {}, {
+    const Parent = create(class Parent {}, {
       fields: {
         child: Child,
       },
@@ -213,20 +213,20 @@ describe('Model', () => {
 
 
   it('passes down a root instance', () => {
-    const GrandChild = Model.create(class GrandChild {}, {
+    const GrandChild = create(class GrandChild {}, {
       fields: {
         id: true,
       },
     });
 
-    const Child = Model.create(class Child {}, {
+    const Child = create(class Child {}, {
       fields: {
         id: true,
         child: GrandChild,
       },
     });
 
-    const Parent = Model.create(class Parent {}, {
+    const Parent = create(class Parent {}, {
       fields: {
         child: Child,
       },
@@ -240,7 +240,7 @@ describe('Model', () => {
 
 
   it('can create a child that is an instance of itself', () => {
-    const Selfie = Model.create(class Selfie {}, {
+    const Selfie = create(class Selfie {}, {
       fields: {
         child: 'Selfie',
       },
@@ -253,14 +253,14 @@ describe('Model', () => {
 
 
   it('can create a child of future model class', () => {
-    const Present = Model.create(class Present {}, {
+    const Present = create(class Present {}, {
       fields: {
         child: 'Future',
-        children: Model.list([(x) => x, 'Future', (x) => x]),
+        children: list([(x) => x, 'Future', (x) => x]),
       },
     });
 
-    const Future = Model.create(class Future {});
+    const Future = create(class Future {});
 
     let parent = new Present({child: {}});
     expect(parent.child).to.be.an.instanceof(Future);
@@ -282,7 +282,7 @@ describe('Model', () => {
 
 
   it('combines getter and Model', () => {
-    const Parent = Model.create(class Parent {
+    const Parent = create(class Parent {
       get child() {
         return {id: this.childId};
       }
@@ -293,11 +293,11 @@ describe('Model', () => {
       fields: {
         childId: true,
         child: 'Child',
-        children: Model.list('Child'),
+        children: list('Child'),
       },
     });
 
-    const Child = Model.create(class Child {}, {
+    const Child = create(class Child {}, {
       fields: {
         id: true,
       },
@@ -314,10 +314,10 @@ describe('Model', () => {
 
 
   it('can transform field value with a mapping function', () => {
-    const Simple = Model.create(class Simple {}, {
+    const Simple = create(class Simple {}, {
       fields: {
         bool: Boolean,
-        bools: Model.list(Boolean),
+        bools: list(Boolean),
         serialized: JSON.stringify,
         unserialized: JSON.parse,
         bool2: function(bool2) {
@@ -352,7 +352,7 @@ describe('Model', () => {
 
   it('User', () => {
     // Create a Node model
-    const Node = Model.create(class Node {
+    const Node = create(class Node {
       static isNode(obj) { return obj instanceof Node; }
       get type() { return this.constructor.name; }
     }, {
@@ -362,21 +362,21 @@ describe('Model', () => {
     });
 
     // Create a InfoInterface model
-    const InfoInterface = Model.create(class InfoInterface {}, {
+    const InfoInterface = create(class InfoInterface {}, {
       fields: {
         isPublic: true,
       },
     });
 
     // Create a InfoBase model
-    const InfoBase = Model.create(class InfoBase {
+    const InfoBase = create(class InfoBase {
       static isInfo = (obj) => obj instanceof InfoBase
       get user() { return this.$parentOfType('User'); }
       isSharedWith(user) { return this.user.isFriendsWith(user); }
     });
 
     // Create a Name model
-    const NameModel = Model.create(class Name {
+    const NameModel = create(class Name {
       static isName(obj) { return obj instanceof NameModel; }
       getFirstAndLastName() { return [this.firstName, this.lastName]; }
       get shortName() { return `${this.firstName} ${this.lastName}`; }
@@ -393,14 +393,14 @@ describe('Model', () => {
     });
 
     // Create a Profile model
-    const Profile = Model.create(class Profile {}, {
+    const Profile = create(class Profile {}, {
       fields: {
-        names: Model.list(NameModel),
+        names: list(NameModel),
       },
     });
 
     // Create a User model
-    const User = Model.create(class User {
+    const User = create(class User {
       get friends() {
         return this.$get('friendIds').map((id) => ({id}));
       }
