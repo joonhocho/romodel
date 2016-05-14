@@ -23,15 +23,13 @@ if ((() => {
 })()) {
   defineClassName = (Class, value) => defineStatic(Class, 'name', value);
 } else {
-  defineClassName = (Class, value) => {
-    // Old Node versions require the following options to overwrite class name.
-    return Object.defineProperty(Class, 'name', {
-      value,
-      writable: false,
-      enumerable: false,
-      configurable: false,
-    });
-  };
+  // Old Node versions require the following options to overwrite class name.
+  defineClassName = (Class, value) => Object.defineProperty(Class, 'name', {
+    value,
+    writable: false,
+    enumerable: false,
+    configurable: false,
+  });
 }
 export {defineClassName};
 
@@ -42,7 +40,7 @@ export function defineGetterSetter(Class, name, get, set) {
     enumerable: true,
     configurable: true,
   });
-};
+}
 
 export function inheritPropertyFrom(objA, objB, key, asKey) {
   return Object.defineProperty(

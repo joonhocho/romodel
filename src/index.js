@@ -6,14 +6,18 @@ import {
   inheritClass,
 } from './util';
 
+
 const SIGNATURE = {};
 
+
 const createCleanObject = () => Object.create(null);
+
 
 const createSetter = (key) => function set(value) {
   this._data[key] = value;
   delete this._cache[key];
 };
+
 
 const getGetter = (obj, key) => {
   const {get} = Object.getOwnPropertyDescriptor(obj, key);
@@ -21,36 +25,48 @@ const getGetter = (obj, key) => {
     throw new Error(`Getter must be set for property, '${key}'`);
   }
   return get;
-}
+};
 
 let models = createCleanObject();
 
+
 const getModel = (model) => typeof model === 'string' ? models[model] : model;
 
+
 const createChildModel = (parent, Class, data) => new Class(data, parent, parent._root, parent._context);
+
 
 const bypass = (x) => x;
 const block = () => undefined;
 
-const normalizeFieldMappingFns = (fns) => {
-  return (Array.isArray(fns) ? fns : [fns]).map((fn) => {
-    switch (typeof fn) {
-    case 'boolean':
-      return fn ? bypass : block;
-    case 'string':
-      return models[fn] || fn;
-    case 'function':
-      return fn;
-    default:
-      console.error(fn);
-      throw new Error('Invalid field transform function!');
-    }
-  }).filter((x) => x);
-};
+
+const normalizeFieldMappingFns = (fns) => (Array.isArray(fns) ? fns : [fns]).map((fn) => {
+  switch (typeof fn) {
+  case 'boolean':
+    return fn ? bypass : block;
+  case 'string':
+    return models[fn] || fn;
+  case 'function':
+    return fn;
+  default:
+    console.error(fn);
+    throw new Error('Invalid field transform function!');
+  }
+}).filter((x) => x);
+
 
 const createModelMapFn = (Class) => function(data) {
   return data && createChildModel(this, Class, data);
 };
+
+
+class FieldType {
+  constructor({type, ofType}) {
+    this.type = type;
+    this.ofType = ofType;
+  }
+}
+
 
 const createGetter = (prototype, key, fieldMappingFns) => {
   if (fieldMappingFns == null) {
@@ -59,9 +75,10 @@ const createGetter = (prototype, key, fieldMappingFns) => {
 
   const getter = key in prototype ?
       getGetter(prototype, key) :
-      function() { return this._data[key] };
+      function() { return this._data[key]; };
 
-  let fns = fieldMappingFns, isList = false;
+  let fns = fieldMappingFns;
+  let isList = false;
   if (fns instanceof FieldType) {
     isList = fns.type === 'list';
     fns = fns.ofType;
@@ -76,7 +93,7 @@ const createGetter = (prototype, key, fieldMappingFns) => {
   let mapFn;
   if (fns.length === 1) {
     // One mapping function.
-    let fn = fns[0];
+    const fn = fns[0];
     if (fn.$signature === SIGNATURE) {
       mapFn = createModelMapFn(fn);
     } else if (typeof fn === 'string') {
@@ -122,24 +139,17 @@ const createGetter = (prototype, key, fieldMappingFns) => {
       }
       return c[key];
     };
-  } else {
-    // Non-list type field.
-    return function get() {
-      const {_cache: c} = this;
-      if (!(key in c)) {
-        c[key] = mapFn.call(this, getter.call(this));
-      }
-      return c[key];
-    };
   }
-};
 
-class FieldType {
-  constructor({type, ofType}) {
-    this.type = type;
-    this.ofType = ofType;
-  }
-}
+  // Non-list type field.
+  return function get() {
+    const {_cache: c} = this;
+    if (!(key in c)) {
+      c[key] = mapFn.call(this, getter.call(this));
+    }
+    return c[key];
+  };
+};
 
 
 export const list = (x) => new FieldType({type: 'list', ofType: x});
@@ -219,10 +229,10 @@ export class Model {
   }
 
   $parentOfType(type) {
-    const Model = getModel(type);
+    const ParentModel = getModel(type);
     let p = this;
     while (p = p._parent) {
-      if (p instanceof Model) {
+      if (p instanceof ParentModel) {
         return p;
       }
     }
