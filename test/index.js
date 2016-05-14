@@ -447,8 +447,8 @@ describe('Model', () => {
 
     // set hidden field
     user.hiddenField = 3;
-    expect(user.hiddenField).to.be.undefined;
-    expect(user.$get('hiddenField')).to.equal(3);
+    expect(user.hiddenField).to.equal(3);
+    expect(user.$get('hiddenField')).to.equal(1);
 
     // constructor
     expect(user.constructor).to.equal(User);
@@ -540,7 +540,7 @@ describe('Model', () => {
 
     // clear cache
     expect(profile.names[0]).to.equal(name);
-    profile.$clearCache('names');
+    delete profile.names;
     expect(profile.names[0]).to.not.equal(name);
     expect(profile.names[0].id).to.equal(name.id);
 

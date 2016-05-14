@@ -1,5 +1,6 @@
 import {
   forEach,
+  setProperty,
   defineClassName,
   defineStatic,
   defineGetterSetter,
@@ -15,7 +16,7 @@ const createCleanObject = () => Object.create(null);
 
 const createSetter = (key) => function set(value) {
   this._data[key] = value;
-  delete this._cache[key];
+  delete this[key];
 };
 
 
@@ -132,22 +133,18 @@ const createGetter = (prototype, key, fieldMappingFns) => {
   if (isList) {
     // List type field.
     return function get() {
-      const {_cache: c} = this;
-      if (!(key in c)) {
-        const val = getter.call(this);
-        c[key] = val && val.map(mapFn, this);
-      }
-      return c[key];
+      let val = getter.call(this);
+      if (val) val = val.map(mapFn, this);
+      setProperty(this, key, val);
+      return val;
     };
   }
 
   // Non-list type field.
   return function get() {
-    const {_cache: c} = this;
-    if (!(key in c)) {
-      c[key] = mapFn.call(this, getter.call(this));
-    }
-    return c[key];
+    let val = mapFn.call(this, getter.call(this));
+    setProperty(this, key, val);
+    return val;
   };
 };
 
@@ -198,14 +195,10 @@ export class Model {
     this._parent = parent || null;
     this._root = root || this;
     this._context = context;
-    this._cache = {};
   }
 
   $destroy() {
-    delete this._data;
-    delete this._parent;
-    delete this._context;
-    delete this._cache;
+    Object.getOwnPropertyNames(this).forEach((key) => delete this[key]);
   }
 
   get $data() {
@@ -246,14 +239,6 @@ export class Model {
   $createChildren(model, dataList) {
     const Class = getModel(model);
     return dataList && dataList.map((data) => createChildModel(this, Class, data));
-  }
-
-  $clearCache(key) {
-    if (key) {
-      delete this._cache[key];
-    } else {
-      this._cache = {};
-    }
   }
 
   $implements(Type) {
