@@ -205,7 +205,7 @@ describe('Model', () => {
     });
 
     const context = {};
-    const parent = new Parent({child: {child: {}}}, null, null, context);
+    const parent = new Parent({child: {child: {}}}, context);
     expect(parent.$context).to.equal(context);
     expect(parent.child.$context).to.equal(context);
     expect(parent.child.child.$context).to.equal(context);

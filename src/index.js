@@ -34,7 +34,7 @@ let models = createCleanObject();
 const getModel = (model) => typeof model === 'string' ? models[model] : model;
 
 
-const createChildModel = (parent, Class, data) => new Class(data, parent, parent._root, parent._context);
+const createChildModel = (parent, Class, data) => new Class(data, parent._context, parent, parent._root);
 
 
 const bypass = (x) => x;
@@ -190,7 +190,7 @@ export const clear = () => { models = createCleanObject(); };
 
 
 export class Model {
-  constructor(data, parent, root, context = null) {
+  constructor(data, context = null, parent, root) {
     this._data = data;
     this._parent = parent || null;
     this._root = root || this;
