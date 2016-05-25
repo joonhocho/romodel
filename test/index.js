@@ -411,7 +411,6 @@ describe('Model', () => {
       interfaces: [Node],
       fields: {
         profile: Profile,
-        hiddenField: false,
       },
     });
 

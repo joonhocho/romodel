@@ -38,14 +38,16 @@ const getModel = (model) => typeof model === 'string' ? models[model] : model;
 const createChildModel = (parent, Class, data) => new Class(data, parent._context, parent, parent._root);
 
 
-const bypass = (x) => x;
 const block = () => undefined;
 
 
 const normalizeFieldMappingFn = (fn) => {
   switch (typeof fn) {
   case 'boolean':
-    return fn ? bypass : block;
+    if (fn) {
+      return null;
+    }
+    break;
   case 'string':
     return models[fn] || fn;
   case 'function':
@@ -62,7 +64,7 @@ const normalizeFieldType = (type) => {
   case 'boolean':
   case 'string':
   case 'function':
-    return {map: [normalizeFieldMappingFn(type)]};
+    return {map: [normalizeFieldMappingFn(type)].filter((x) => x)};
   case 'object':
     if (Array.isArray(type)) {
       return {map: type};
@@ -163,7 +165,7 @@ const createMapContextForMultipleFunctions = (fns) => {
 const createGetter = (prototype, key, type) => {
   let {
     map: fns,
-    list,
+    list = false,
     cache = defaultCache,
   } = normalizeFieldType(type);
 
@@ -174,9 +176,9 @@ const createGetter = (prototype, key, type) => {
     getter = createDataGetter(key);
   }
 
-  if (fns && fns.length) {
-    fns = fns.map(normalizeFieldMappingFn);
+  fns = fns && fns.map(normalizeFieldMappingFn).filter((x) => x);
 
+  if (fns && fns.length) {
     let context;
     if (fns.length === 1) {
       context = createMapContextForSingleFunction(fns[0]);
