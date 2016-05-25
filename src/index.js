@@ -41,7 +41,7 @@ const bypass = (x) => x;
 const block = () => undefined;
 
 
-const normalizeFieldMappingFns = (fns) => (Array.isArray(fns) ? fns : [fns]).map((fn) => {
+const normalizeFieldMappingFn = (fn) => {
   switch (typeof fn) {
   case 'boolean':
     return fn ? bypass : block;
@@ -50,51 +50,70 @@ const normalizeFieldMappingFns = (fns) => (Array.isArray(fns) ? fns : [fns]).map
   case 'function':
     return fn;
   default:
-    console.error(fn);
-    throw new Error('Invalid field transform function!');
   }
-}).filter((x) => x);
-
-
-const createModelMapFn = (Class) => function(data) {
-  return data && createChildModel(this, Class, data);
+  console.error(fn);
+  throw new Error('Invalid field map function!');
 };
 
 
-class FieldType {
-  constructor({type, ofType}) {
-    this.type = type;
-    this.ofType = ofType;
+const normalizeFieldType = (type) => {
+  switch (typeof type) {
+  case 'boolean':
+  case 'string':
+  case 'function':
+    return {map: [normalizeFieldMappingFn(type)]};
+  case 'object':
+    if (Array.isArray(type)) {
+      return {map: type};
+    }
+    if (type) {
+      return {
+        ...type,
+        map: normalizeFieldType(type.map).map,
+      };
+    }
+    break;
+  default:
+    // break;
   }
-}
+  console.error(type);
+  throw new Error('Invalid field type!');
+};
 
 
-const createGetter = (prototype, key, fieldMappingFns) => {
-  if (fieldMappingFns == null) {
+const mapPromise = (data, map, reject) => {
+  if (data && typeof data.then === 'function') {
+    return data.then(map, reject);
+  }
+  return map(data);
+};
+
+
+const createModelMapFn = (Class) => function(data) {
+  return mapPromise(data, (res) => res && createChildModel(this, Class, res));
+};
+
+
+const createGetter = (prototype, key, {map, list}) => {
+  if (map == null) {
     throw new Error('Invalid field transform function!');
   }
+
+  map = map.map(normalizeFieldMappingFn);
 
   const getter = key in prototype ?
       getGetter(prototype, key) :
       function() { return this._data[key]; };
 
-  let fns = fieldMappingFns;
-  let isList = false;
-  if (fns instanceof FieldType) {
-    isList = fns.type === 'list';
-    fns = fns.ofType;
-  }
-  fns = normalizeFieldMappingFns(fns);
-
-  if (!fns.length) {
+  if (!map.length) {
     // No mapping functions.
     return getter;
   }
 
   let mapFn;
-  if (fns.length === 1) {
+  if (map.length === 1) {
     // One mapping function.
-    const fn = fns[0];
+    const fn = map[0];
     if (fn.$signature === SIGNATURE) {
       mapFn = createModelMapFn(fn);
     } else if (typeof fn === 'string') {
@@ -110,7 +129,7 @@ const createGetter = (prototype, key, fieldMappingFns) => {
     }
   } else {
     // Multiple mapping function.
-    fns = fns.map((fn, i) => {
+    map = map.map((fn, i) => {
       if (fn.$signature === SIGNATURE) {
         return createModelMapFn(fn);
       }
@@ -119,22 +138,22 @@ const createGetter = (prototype, key, fieldMappingFns) => {
           if (!models[fn]) {
             throw new Error(`Unknown field model. model='${fn}'`);
           }
-          fn = fns[i] = createModelMapFn(models[fn]);
+          fn = map[i] = createModelMapFn(models[fn]);
           return fn.call(this, data);
         };
       }
       return fn;
     });
     mapFn = function(data) {
-      return fns.reduce((x, fn) => fn.call(this, x), data);
+      return map.reduce((x, fn) => fn.call(this, x), data);
     };
   }
 
-  if (isList) {
+  if (list) {
     // List type field.
     return function get() {
       let val = getter.call(this);
-      if (val) val = val.map(mapFn, this);
+      if (val) val = mapPromise(val, (v) => v.map(mapFn, this));
       setProperty(this, key, val);
       return val;
     };
@@ -142,14 +161,17 @@ const createGetter = (prototype, key, fieldMappingFns) => {
 
   // Non-list type field.
   return function get() {
-    let val = mapFn.call(this, getter.call(this));
+    const val = mapFn.call(this, getter.call(this));
     setProperty(this, key, val);
     return val;
   };
 };
 
 
-export const list = (x) => new FieldType({type: 'list', ofType: x});
+export const list = (x) => ({
+  ...normalizeFieldType(x),
+  list: true,
+});
 
 
 export const create = (Class, {
@@ -174,8 +196,9 @@ export const create = (Class, {
       inheritClass(NewModel, from));
 
   forEach(fields, (type, key) => defineGetterSetter(
-    NewModel.prototype, key,
-    createGetter(NewModel.prototype, key, type),
+    NewModel.prototype,
+    key,
+    createGetter(NewModel.prototype, key, normalizeFieldType(type)),
     createSetter(key)
   ));
 

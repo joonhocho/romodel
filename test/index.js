@@ -549,4 +549,48 @@ describe('Model', () => {
     expect(() => user.id).to.throw();
     expect(user.$parent).to.be.undefined;
   });
+
+
+  it('can handle promise value', (done) => {
+    const Value = create(class Value {
+    }, {
+      fields: {
+        v: true,
+      },
+    });
+
+    const Model = create(class Model {
+      get pValue() {
+        return Promise.resolve({v: 1});
+      }
+      get pValues() {
+        return Promise.resolve([{v: 1}, {v: 2}]);
+      }
+    }, {
+      fields: {
+        pValue: [Value],
+        pValues: {
+          map: [Value],
+          list: true,
+        },
+      },
+    });
+
+    const model = new Model({});
+
+    Promise.all([
+      model.pValue.then((pValue) => {
+        expect(pValue).to.be.an.instanceof(Value);
+        expect(pValue.v).to.equal(1);
+      }),
+      model.pValues.then((value) => {
+        const [a, b] = value;
+        expect(a).to.be.an.instanceof(Value);
+        expect(a.v).to.equal(1);
+
+        expect(b).to.be.an.instanceof(Value);
+        expect(b.v).to.equal(2);
+      }),
+    ]).then(() => done(), done);
+  });
 });
