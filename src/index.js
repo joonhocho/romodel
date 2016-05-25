@@ -93,16 +93,13 @@ const mapPromise = (data, map, reject) => {
 };
 
 
-const createModelMapFn = (Class) => function(data) {
+const createChildModelFunction = (Class) => function(data) {
   return mapPromise(data, (res) => res && createChildModel(this, Class, res));
 };
 
 
-const createDataGetter = (prototype, key) => {
-  if (key in prototype) {
-    return getGetterFromPrototype(prototype, key);
-  }
-  return function() { return this._data[key]; };
+const createDataGetter = (key) => function get() {
+  return this._data[key];
 };
 
 
@@ -129,7 +126,7 @@ const createGetterWithMapForNonList = (key, getter, context) => function get() {
 
 const updateMappingFunction = (container, key, fn) => {
   if (fn.$signature === SIGNATURE) {
-    return createModelMapFn(fn);
+    return createChildModelFunction(fn);
   }
 
   if (typeof fn === 'string') {
@@ -137,7 +134,7 @@ const updateMappingFunction = (container, key, fn) => {
       if (!models[fn]) {
         throw new Error(`Unknown field model. model='${fn}'`);
       }
-      container[key] = createModelMapFn(models[fn]);
+      container[key] = createChildModelFunction(models[fn]);
       return container[key].call(this, data);
     };
   }
@@ -170,15 +167,16 @@ const createGetter = (prototype, key, type) => {
     cache = defaultCache,
   } = normalizeFieldType(type);
 
-  if (fns == null) {
-    throw new Error('Invalid field transform function!');
+  let getter;
+  if (key in prototype) {
+    getter = getGetterFromPrototype(prototype, key);
+  } else {
+    getter = createDataGetter(key);
   }
 
-  let getter = createDataGetter(prototype, key);
+  if (fns && fns.length) {
+    fns = fns.map(normalizeFieldMappingFn);
 
-  fns = fns.map(normalizeFieldMappingFn);
-
-  if (fns.length) {
     let context;
     if (fns.length === 1) {
       context = createMapContextForSingleFunction(fns[0]);
@@ -309,6 +307,7 @@ export class Model {
 
 
 export default {
+  config,
   list,
   create,
   get,
