@@ -9,6 +9,7 @@ import {
 
 
 const SIGNATURE = {};
+let defaultCache = true;
 
 
 const createCleanObject = () => Object.create(null);
@@ -20,7 +21,7 @@ const createSetter = (key) => function set(value) {
 };
 
 
-const getGetter = (obj, key) => {
+const getGetterFromPrototype = (obj, key) => {
   const {get} = Object.getOwnPropertyDescriptor(obj, key);
   if (!get) {
     throw new Error(`Getter must be set for property, '${key}'`);
@@ -81,8 +82,11 @@ const normalizeFieldType = (type) => {
 };
 
 
+const isPromise = (x) => x != null && typeof x.then === 'function';
+
+
 const mapPromise = (data, map, reject) => {
-  if (data && typeof data.then === 'function') {
+  if (isPromise(data)) {
     return data.then(map, reject);
   }
   return map(data);
@@ -94,77 +98,111 @@ const createModelMapFn = (Class) => function(data) {
 };
 
 
-const createGetter = (prototype, key, {map, list}) => {
-  if (map == null) {
+const createDataGetter = (prototype, key) => {
+  if (key in prototype) {
+    return getGetterFromPrototype(prototype, key);
+  }
+  return function() { return this._data[key]; };
+};
+
+
+const createGetterWithCache = (key, getter) => function get() {
+  const val = getter.call(this);
+  setProperty(this, key, val);
+  return val;
+};
+
+
+const createGetterWithMapForList = (key, getter, context) => function get() {
+  let val = getter.call(this);
+  if (val) {
+    return mapPromise(val, (v) => v.map(context.map, this));
+  }
+  return val;
+};
+
+
+const createGetterWithMapForNonList = (key, getter, context) => function get() {
+  return context.map.call(this, getter.call(this));
+};
+
+
+const updateMappingFunction = (container, key, fn) => {
+  if (fn.$signature === SIGNATURE) {
+    return createModelMapFn(fn);
+  }
+
+  if (typeof fn === 'string') {
+    return function(data) {
+      if (!models[fn]) {
+        throw new Error(`Unknown field model. model='${fn}'`);
+      }
+      container[key] = createModelMapFn(models[fn]);
+      return container[key].call(this, data);
+    };
+  }
+
+  return fn;
+};
+
+
+const createMapContextForSingleFunction = (fn) => {
+  const context = {};
+  context.map = updateMappingFunction(context, 'map', fn);
+  return context;
+};
+
+
+const createMapContextForMultipleFunctions = (fns) => {
+  fns.forEach((fn, i) => fns[i] = updateMappingFunction(fns, i, fn));
+  return {
+    map: function(data) {
+      return fns.reduce((x, fn) => fn.call(this, x), data);
+    },
+  };
+};
+
+
+const createGetter = (prototype, key, type) => {
+  let {
+    map: fns,
+    list,
+    cache = defaultCache,
+  } = normalizeFieldType(type);
+
+  if (fns == null) {
     throw new Error('Invalid field transform function!');
   }
 
-  map = map.map(normalizeFieldMappingFn);
+  let getter = createDataGetter(prototype, key);
 
-  const getter = key in prototype ?
-      getGetter(prototype, key) :
-      function() { return this._data[key]; };
+  fns = fns.map(normalizeFieldMappingFn);
 
-  if (!map.length) {
-    // No mapping functions.
-    return getter;
-  }
-
-  let mapFn;
-  if (map.length === 1) {
-    // One mapping function.
-    const fn = map[0];
-    if (fn.$signature === SIGNATURE) {
-      mapFn = createModelMapFn(fn);
-    } else if (typeof fn === 'string') {
-      mapFn = function(data) {
-        if (!models[fn]) {
-          throw new Error(`Unknown field model. model='${fn}'`);
-        }
-        mapFn = createModelMapFn(models[fn]);
-        return mapFn.call(this, data);
-      };
+  if (fns.length) {
+    let context;
+    if (fns.length === 1) {
+      context = createMapContextForSingleFunction(fns[0]);
     } else {
-      mapFn = fn;
+      context = createMapContextForMultipleFunctions(fns);
     }
-  } else {
-    // Multiple mapping function.
-    map = map.map((fn, i) => {
-      if (fn.$signature === SIGNATURE) {
-        return createModelMapFn(fn);
-      }
-      if (typeof fn === 'string') {
-        return function(data) {
-          if (!models[fn]) {
-            throw new Error(`Unknown field model. model='${fn}'`);
-          }
-          fn = map[i] = createModelMapFn(models[fn]);
-          return fn.call(this, data);
-        };
-      }
-      return fn;
-    });
-    mapFn = function(data) {
-      return map.reduce((x, fn) => fn.call(this, x), data);
-    };
+
+    if (list) {
+      getter = createGetterWithMapForList(key, getter, context);
+    } else {
+      getter = createGetterWithMapForNonList(key, getter, context);
+    }
   }
 
-  if (list) {
-    // List type field.
-    return function get() {
-      let val = getter.call(this);
-      if (val) val = mapPromise(val, (v) => v.map(mapFn, this));
-      setProperty(this, key, val);
-      return val;
-    };
+  if (cache) {
+    getter = createGetterWithCache(key, getter);
   }
 
-  // Non-list type field.
-  return function get() {
-    const val = mapFn.call(this, getter.call(this));
-    setProperty(this, key, val);
-    return val;
-  };
+  return getter;
+};
+
+
+export const config = (obj) => {
+  if (typeof obj.cache === 'boolean') defaultCache = obj.cache;
 };
 
 
@@ -172,6 +210,12 @@ export const list = (x) => ({
   ...normalizeFieldType(x),
   list: true,
 });
+
+
+export const get = getModel;
+
+
+export const clear = () => { models = createCleanObject(); };
 
 
 export const create = (Class, {
@@ -198,18 +242,12 @@ export const create = (Class, {
   forEach(fields, (type, key) => defineGetterSetter(
     NewModel.prototype,
     key,
-    createGetter(NewModel.prototype, key, normalizeFieldType(type)),
+    createGetter(NewModel.prototype, key, type),
     createSetter(key)
   ));
 
   return NewModel;
 };
-
-
-export const get = getModel;
-
-
-export const clear = () => { models = createCleanObject(); };
 
 
 export class Model {
