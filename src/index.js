@@ -4,15 +4,17 @@ import {
   defineClassName,
   defineStatic,
   defineGetterSetter,
+  defineMethod,
   inheritClass,
+  isPromise,
+  nullObject,
+  getGetter,
+  getValue,
 } from './util';
 
 
 const SIGNATURE = {};
 let defaultCache = true;
-
-
-const createCleanObject = () => Object.create(null);
 
 
 const createSetter = (key) => function set(value) {
@@ -22,14 +24,14 @@ const createSetter = (key) => function set(value) {
 
 
 const getGetterFromPrototype = (obj, key) => {
-  const {get} = Object.getOwnPropertyDescriptor(obj, key);
+  const get = getGetter(obj, key);
   if (!get) {
     throw new Error(`Getter must be set for property, '${key}'`);
   }
   return get;
 };
 
-let models = createCleanObject();
+let models = nullObject();
 
 
 const getModel = (model) => typeof model === 'string' ? models[model] : model;
@@ -84,9 +86,6 @@ const normalizeFieldType = (type) => {
 };
 
 
-const isPromise = (x) => x != null && typeof x.then === 'function';
-
-
 const mapPromise = (data, map, reject) => {
   if (isPromise(data)) {
     return data.then(map, reject);
@@ -102,27 +101,6 @@ const createChildModelFunction = (Class) => function(data) {
 
 const createDataGetter = (key) => function get() {
   return this._data[key];
-};
-
-
-const createGetterWithCache = (key, getter) => function get() {
-  const val = getter.call(this);
-  setProperty(this, key, val);
-  return val;
-};
-
-
-const createGetterWithMapForList = (key, getter, context) => function get() {
-  let val = getter.call(this);
-  if (val) {
-    return mapPromise(val, (v) => v.map(context.map, this));
-  }
-  return val;
-};
-
-
-const createGetterWithMapForNonList = (key, getter, context) => function get() {
-  return context.map.call(this, getter.call(this));
 };
 
 
@@ -162,6 +140,53 @@ const createMapContextForMultipleFunctions = (fns) => {
 };
 
 
+const createMapContext = (fns) => {
+  fns = fns && fns.map(normalizeFieldMappingFn).filter((x) => x);
+  if (fns && fns.length) {
+    if (fns.length === 1) {
+      return createMapContextForSingleFunction(fns[0]);
+    }
+    return createMapContextForMultipleFunctions(fns);
+  }
+  return null;
+};
+
+
+const createGetterWithMapForList = (key, getter, context) => function get() {
+  let val = getter.call(this);
+  if (val) {
+    return mapPromise(val, (v) => v.map(context.map, this));
+  }
+  return val;
+};
+
+
+const createGetterWithMapForNonList = (key, getter, context) => function get() {
+  return context.map.call(this, getter.call(this));
+};
+
+
+const createGetterWithCache = (key, getter) => function get() {
+  const val = getter.call(this);
+  setProperty(this, key, val);
+  return val;
+};
+
+
+const createMethodWithMapForList = (key, method, context) => function() {
+  let val = method.apply(this, arguments);
+  if (val) {
+    return mapPromise(val, (v) => v.map(context.map, this));
+  }
+  return val;
+};
+
+
+const createMethodWithMapForNonList = (key, method, context) => function() {
+  return context.map.call(this, method.apply(this, arguments));
+};
+
+
 const createGetter = (prototype, key, type) => {
   let {
     map: fns,
@@ -176,16 +201,8 @@ const createGetter = (prototype, key, type) => {
     getter = createDataGetter(key);
   }
 
-  fns = fns && fns.map(normalizeFieldMappingFn).filter((x) => x);
-
-  if (fns && fns.length) {
-    let context;
-    if (fns.length === 1) {
-      context = createMapContextForSingleFunction(fns[0]);
-    } else {
-      context = createMapContextForMultipleFunctions(fns);
-    }
-
+  const context = createMapContext(fns);
+  if (context) {
     if (list) {
       getter = createGetterWithMapForList(key, getter, context);
     } else {
@@ -201,8 +218,27 @@ const createGetter = (prototype, key, type) => {
 };
 
 
+const createMethod = (prototype, key, type, method) => {
+  let {
+    map: fns,
+    list = false,
+  } = normalizeFieldType(type);
+
+  const context = createMapContext(fns);
+  if (context) {
+    if (list) {
+      method = createMethodWithMapForList(key, method, context);
+    } else {
+      method = createMethodWithMapForNonList(key, method, context);
+    }
+  }
+
+  return method;
+};
+
+
 export const config = (obj) => {
-  if (typeof obj.cache === 'boolean') defaultCache = obj.cache;
+  if (obj.cache !== undefined) defaultCache = Boolean(obj.cache);
 };
 
 
@@ -215,13 +251,13 @@ export const list = (x) => ({
 export const get = getModel;
 
 
-export const clear = () => { models = createCleanObject(); };
+export const clear = () => { models = nullObject(); };
 
 
 export const create = (Class, {
   base: Base = Model,
   interfaces = [],
-  fields = createCleanObject(),
+  fields = nullObject(),
 } = {}) => {
   const NewModel = class extends Base {};
 
@@ -233,18 +269,30 @@ export const create = (Class, {
 
   defineClassName(NewModel, name);
   defineStatic(NewModel, '$signature', SIGNATURE);
-  defineStatic(NewModel, '$fields', fields);
   defineStatic(NewModel, '$interfaces', interfaces);
 
   [Class, Base].concat(interfaces).forEach((from) =>
       inheritClass(NewModel, from));
 
-  forEach(fields, (type, key) => defineGetterSetter(
-    NewModel.prototype,
-    key,
-    createGetter(NewModel.prototype, key, type),
-    createSetter(key)
-  ));
+  const {prototype} = NewModel;
+
+  forEach(fields, (type, key) => {
+    const value = getValue(prototype, key);
+    if (typeof value === 'function') {
+      defineMethod(
+        prototype,
+        key,
+        createMethod(prototype, key, type, value)
+      );
+    } else {
+      defineGetterSetter(
+        prototype,
+        key,
+        createGetter(prototype, key, type),
+        createSetter(key)
+      );
+    }
+  });
 
   return NewModel;
 };

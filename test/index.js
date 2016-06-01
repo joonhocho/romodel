@@ -1,3 +1,6 @@
+if (typeof Promise === 'undefined') {
+  require('es6-promise').polyfill();
+}
 import chai, {expect} from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 chai.use(chaiAsPromised);
@@ -347,6 +350,63 @@ describe('Model', () => {
 
     expect(new Simple({bool: 1, bool2: 0}).bool2).to.eql([true, false]);
     expect(new Simple({bools: [1, 0], bools2: [0, 1]}).bools2).to.eql([true, false, false, true]);
+  });
+
+
+  it('supports mapping functions on methods', (done) => {
+    const Parent = create(class Parent {
+      getChild(add) {
+        return {id: add + this.childId};
+      }
+      getChildren(add) {
+        return [{id: add + this.childId}];
+      }
+      getChildP(add) {
+        return Promise.resolve({id: add + this.childId});
+      }
+      getChildrenP(add) {
+        return Promise.resolve([{id: add + this.childId}]);
+      }
+    }, {
+      fields: {
+        childId: true,
+        getChild: 'Child',
+        getChildren: list('Child'),
+        getChildP: 'Child',
+        getChildrenP: list('Child'),
+      },
+    });
+
+    const Child = create(class Child {}, {
+      fields: {
+        id: true,
+      },
+    });
+
+    const parent = new Parent({childId: 3});
+
+    const child = parent.getChild(2);
+    expect(child).to.be.an.instanceof(Child);
+    expect(parent.getChild(2)).to.not.equal(child);
+    expect(child.id).to.equal(5);
+
+    const children = parent.getChildren(1);
+    expect(children[0]).to.be.an.instanceof(Child);
+    expect(parent.getChildren(1)).to.not.equal(children);
+    expect(children[0].id).to.equal(4);
+
+    Promise.all([
+      parent.getChildP(2).then((childP) => {
+        expect(childP).to.be.an.instanceof(Child);
+        expect(parent.getChildP(2)).to.not.equal(parent.getChildP(2));
+        expect(childP.id).to.equal(5);
+      }),
+      parent.getChildrenP(1).then((childrenP) => {
+        expect(childrenP[0]).to.be.an.instanceof(Child);
+        expect(parent.getChildrenP(1)).to.not.equal(parent.getChildrenP(1));
+        expect(childrenP[0].id).to.equal(4);
+      }),
+    ]).then(() => done(), done);
   });
 
 

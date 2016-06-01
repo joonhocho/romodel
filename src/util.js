@@ -118,3 +118,21 @@ export function inheritClass(classA, classB) {
   inheritPrototype(classA, classB);
   return classA;
 }
+
+export function isPromise(x) {
+  return x != null && typeof x.then === 'function';
+}
+
+export function nullObject() {
+  return Object.create(null);
+}
+
+export function getGetter(obj, key) {
+  const desc = Object.getOwnPropertyDescriptor(obj, key);
+  return desc && desc.get;
+}
+
+export function getValue(obj, key) {
+  const desc = Object.getOwnPropertyDescriptor(obj, key);
+  return desc && desc.value;
+}
