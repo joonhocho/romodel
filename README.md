@@ -1,4 +1,9 @@
 # RoModel
+[![Build Status](https://travis-ci.org/joonhocho/romodel.svg?branch=master)](https://travis-ci.org/joonhocho/romodel)
+[![Coverage Status](https://coveralls.io/repos/github/joonhocho/romodel/badge.svg?branch=master)](https://coveralls.io/github/joonhocho/romodel?branch=master)
+[![npm version](https://badge.fury.io/js/romodel.svg)](https://badge.fury.io/js/romodel)
+[![Dependency Status](https://david-dm.org/joonhocho/romodel.svg)](https://david-dm.org/joonhocho/romodel)
+
 RoModel is a simple, lightweight, unopinionated, read-only, immutable, model based data access library.
 
 
