@@ -6,6 +6,8 @@
 
 RoModel is a simple, lightweight, unopinionated, read-only, immutable, model based data access library.
 
+DOES NOT SUPPORT Node.js < 4.0
+
 
 ### Install
 ```
