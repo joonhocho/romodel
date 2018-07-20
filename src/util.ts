@@ -1,10 +1,4 @@
-export type WithProp<O extends IAnyObject, K extends string, V> = O &
-  { [k in K]: V };
-
-export interface IAnyObject {
-  [key: string]: any;
-  [key: number]: any;
-}
+import { IAnyObject, WithProp } from 'src/types';
 
 export const forEach = <O extends IAnyObject>(
   obj: O,
@@ -152,6 +146,9 @@ export const inheritPropertyFrom = <
     key
   ) as any);
 
+type Inherit<O1 extends IAnyObject, O2 extends IAnyObject, E> = O1 &
+  Pick<O2, Exclude<keyof O2, keyof O1 | E>>;
+
 export const inheritFrom = <
   O1 extends IAnyObject,
   O2 extends IAnyObject,
@@ -160,7 +157,7 @@ export const inheritFrom = <
   obj1: O1,
   obj2: O2,
   excludes?: E
-): O1 & Pick<O2, Exclude<keyof O2, keyof O1 | keyof E>> => {
+): Inherit<O1, O2, keyof E> => {
   const aKeys = Object.getOwnPropertyNames(obj1);
   const bKeys = Object.getOwnPropertyNames(obj2);
 
@@ -173,25 +170,46 @@ export const inheritFrom = <
   return obj1 as any;
 };
 
-const classProps: { [k: string]: 1 } = { length: 1, name: 1, prototype: 1 };
+const classProps: { length: 1; name: 1; prototype: 1 } = {
+  length: 1,
+  name: 1,
+  prototype: 1,
+};
+type InheritStatic<O1, O2> = Inherit<O1, O2, keyof typeof classProps>;
+
 // tslint:disable-next-line typedef
 export const inheritStatic = <O1 extends IAnyObject, O2 extends IAnyObject>(
   obj1: O1,
   obj2: O2
 ) => inheritFrom(obj1, obj2, classProps);
 
-const protoProps: any = { constructor: 1 };
+const protoProps: { constructor: 1 } = { constructor: 1 };
+type InheritPrototype<O1, O2> = Inherit<O1, O2, keyof typeof protoProps>;
 // tslint:disable-next-line typedef
 export const inheritPrototype = <O1 extends IAnyObject, O2 extends IAnyObject>(
   proto1: O1,
   proto2: O2
 ) => inheritFrom(proto1, proto2, protoProps);
 
-export function inheritClass(obj1, obj2) {
+export const inheritClass = <
+  O1 extends {
+    prototype: IAnyObject;
+    new (...args: any[]): any;
+  },
+  O2 extends {
+    prototype: IAnyObject;
+  }
+>(
+  obj1: O1,
+  obj2: O2
+): {
+  prototype: InheritPrototype<O1['prototype'], O2['prototype']>;
+  new (...args: any[]): InheritPrototype<O1['prototype'], O2['prototype']>;
+} & InheritStatic<O1, O2> => {
   inheritStatic(obj1, obj2);
   inheritPrototype(obj1.prototype, obj2.prototype);
-  return obj1;
-}
+  return obj1 as any;
+};
 
 export const isPromise = (x: any): boolean =>
   x != null && typeof x.then === 'function';
@@ -212,4 +230,15 @@ export const getValue = <O extends IAnyObject, K extends string>(
 ): O[K] | undefined => {
   const desc = Object.getOwnPropertyDescriptor(obj, key);
   return desc && desc.value;
+};
+
+export const mapPromise = <T, V>(
+  data: T | PromiseLike<T>,
+  map: (v: T) => V,
+  reject: any
+): V | PromiseLike<V> => {
+  if (data != null && typeof (data as any).then === 'function') {
+    return (data as PromiseLike<T>).then(map, reject);
+  }
+  return map(data as T);
 };
