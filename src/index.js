@@ -6,22 +6,20 @@ import {
   defineGetterSetter,
   defineMethod,
   inheritClass,
-  isPromise,
   nullObject,
   getGetter,
   getValue,
+  fastMap,
 } from './util';
-
 
 const SIGNATURE = {};
 let defaultCache = true;
 
-
-const createSetter = (key) => function set(value) {
-  this._data[key] = value;
-  delete this[key];
-};
-
+const createSetter = (key) =>
+  function set(value) {
+    this._data[key] = value;
+    delete this[key];
+  };
 
 const getGetterFromPrototype = (obj, key) => {
   const get = getGetter(obj, key);
@@ -33,76 +31,68 @@ const getGetterFromPrototype = (obj, key) => {
 
 let models = nullObject();
 
+const getModel = (model) => (typeof model === 'string' ? models[model] : model);
 
-const getModel = (model) => typeof model === 'string' ? models[model] : model;
-
-
-const createChildModel = (parent, Class, data) => new Class(data, parent._context, parent, parent._root);
-
-
-const block = () => undefined;
-
+const createChildModel = (parent, Class, data) =>
+  new Class(data, parent._context, parent, parent._root);
 
 const normalizeFieldMappingFn = (fn) => {
   switch (typeof fn) {
-  case 'boolean':
-    if (fn) {
-      return null;
-    }
-    break;
-  case 'string':
-    return models[fn] || fn;
-  case 'function':
-    return fn;
-  default:
+    case 'boolean':
+      if (fn) {
+        return null;
+      }
+      break;
+    case 'string':
+      return models[fn] || fn;
+    case 'function':
+      return fn;
+    default:
   }
   console.error(fn);
   throw new Error('Invalid field map function!');
 };
 
-
 const normalizeFieldType = (type) => {
   switch (typeof type) {
-  case 'boolean':
-  case 'string':
-  case 'function':
-    return {map: [normalizeFieldMappingFn(type)].filter((x) => x)};
-  case 'object':
-    if (Array.isArray(type)) {
-      return {map: type};
-    }
-    if (type) {
-      return {
-        ...type,
-        map: normalizeFieldType(type.map).map,
-      };
-    }
-    break;
-  default:
+    case 'boolean':
+    case 'string':
+    case 'function':
+      return {map: [normalizeFieldMappingFn(type)].filter((x) => x)};
+    case 'object':
+      if (Array.isArray(type)) {
+        return {map: type};
+      }
+      if (type) {
+        return {
+          ...type,
+          map: normalizeFieldType(type.map).map,
+        };
+      }
+      break;
+    default:
     // break;
   }
   console.error(type);
   throw new Error('Invalid field type!');
 };
 
-
 const mapPromise = (data, map, reject) => {
-  if (isPromise(data)) {
+  if (data != null && typeof data.then === 'function') {
     return data.then(map, reject);
   }
   return map(data);
 };
 
+const createChildModelFunction = (Class) =>
+  function(data) {
+    return mapPromise(data, (res) => res && createChildModel(this, Class, res));
+  };
 
-const createChildModelFunction = (Class) => function(data) {
-  return mapPromise(data, (res) => res && createChildModel(this, Class, res));
-};
-
-
-const createDataGetter = (key) => function get() {
-  return this._data[key];
-};
-
+const createDataGetter = (key) =>
+  function get() {
+    return this._data[key];
+  };
 
 const updateMappingFunction = (container, key, fn) => {
   if (fn.$signature === SIGNATURE) {
@@ -122,77 +112,79 @@ const updateMappingFunction = (container, key, fn) => {
   return fn;
 };
 
-
 const createMapContextForSingleFunction = (fn) => {
   const context = {};
   context.map = updateMappingFunction(context, 'map', fn);
   return context;
 };
 
-
 const createMapContextForMultipleFunctions = (fns) => {
-  fns.forEach((fn, i) => fns[i] = updateMappingFunction(fns, i, fn));
+  fns.forEach((fn, i) => {
+    // needs to be done in place
+    fns[i] = updateMappingFunction(fns, i, fn);
+  });
+  const len = fns.length;
   return {
     map(data) {
-      return fns.reduce((x, fn) => fn.call(this, x), data);
+      let mappedData = data;
+      for (let i = 0; i < len; i += 1) {
+        mappedData = fns[i].call(this, mappedData);
+      }
+      return mappedData;
     },
   };
 };
 
-
 const createMapContext = (fns) => {
-  fns = fns && fns.map(normalizeFieldMappingFn).filter((x) => x);
-  if (fns && fns.length) {
-    if (fns.length === 1) {
-      return createMapContextForSingleFunction(fns[0]);
+  const funcs = fns && fastMap(fns, normalizeFieldMappingFn).filter((x) => x);
+  if (funcs && funcs.length) {
+    if (funcs.length === 1) {
+      return createMapContextForSingleFunction(funcs[0]);
     }
-    return createMapContextForMultipleFunctions(fns);
+    return createMapContextForMultipleFunctions(funcs);
   }
   return null;
 };
 
+const createGetterWithMapForList = (key, getter, context) =>
+  function get() {
+    const val = getter.call(this);
+    if (val) {
+      return mapPromise(val, (v) => fastMap(v, context.map, this));
+    }
+    return val;
+  };
 
-const createGetterWithMapForList = (key, getter, context) => function get() {
-  const val = getter.call(this);
-  if (val) {
-    return mapPromise(val, (v) => v.map(context.map, this));
-  }
-  return val;
-};
+const createGetterWithMapForNonList = (key, getter, context) =>
+  function get() {
+    return context.map.call(this, getter.call(this));
+  };
 
+const createGetterWithCache = (key, getter) =>
+  function get() {
+    const val = getter.call(this);
+    setProperty(this, key, val);
+    return val;
+  };
 
-const createGetterWithMapForNonList = (key, getter, context) => function get() {
-  return context.map.call(this, getter.call(this));
-};
+const createMethodWithMapForList = (key, method, context) =>
+  function() {
+    const val = method.apply(this, arguments);
+    if (val) {
+      return mapPromise(val, (v) => fastMap(v, context.map, this));
+    }
+    return val;
+  };
 
-
-const createGetterWithCache = (key, getter) => function get() {
-  const val = getter.call(this);
-  setProperty(this, key, val);
-  return val;
-};
-
-
-const createMethodWithMapForList = (key, method, context) => function() {
-  const val = method.apply(this, arguments);
-  if (val) {
-    return mapPromise(val, (v) => v.map(context.map, this));
-  }
-  return val;
-};
-
-
-const createMethodWithMapForNonList = (key, method, context) => function() {
-  return context.map.call(this, method.apply(this, arguments));
-};
-
+const createMethodWithMapForNonList = (key, method, context) =>
+  function() {
+    return context.map.call(this, method.apply(this, arguments));
+  };
 
 const createGetter = (prototype, key, type) => {
-  const {
-    map: fns,
-    list = false,
-    cache = defaultCache,
-  } = normalizeFieldType(type);
+  const {map: fns, list = false, cache = defaultCache} = normalizeFieldType(
+    type,
+  );
 
   let getter;
   if (key in prototype) {
@@ -217,12 +209,8 @@ const createGetter = (prototype, key, type) => {
   return getter;
 };
 
-
 const createMethod = (prototype, key, type, method) => {
-  const {
-    map: fns,
-    list = false,
-  } = normalizeFieldType(type);
+  const {map: fns, list = false} = normalizeFieldType(type);
 
   const context = createMapContext(fns);
   if (context) {
@@ -235,7 +223,6 @@ const createMethod = (prototype, key, type, method) => {
 
   return method;
 };
-
 
 export const config = (obj) => {
   if (obj.cache !== undefined) defaultCache = Boolean(obj.cache);
@@ -256,18 +243,16 @@ export const list = (x) => ({
   list: true,
 });
 
-
 export const get = getModel;
 
+export const clear = () => {
+  models = nullObject();
+};
 
-export const clear = () => { models = nullObject(); };
-
-
-export const create = (Class, {
-  base: Base = Model,
-  interfaces = [],
-  fields = nullObject(),
-} = {}) => {
+export const create = (
+  Class,
+  {base: Base = Model, interfaces = [], fields = nullObject()} = {},
+) => {
   const NewModel = class extends Base {};
 
   const {name} = Class;
@@ -280,28 +265,26 @@ export const create = (Class, {
   defineStatic(NewModel, '$signature', SIGNATURE);
   defineStatic(NewModel, '$interfaces', interfaces);
 
-  [Class, Base].concat(interfaces).forEach((from) =>
-    inheritClass(NewModel, from));
+  [Class, Base]
+    .concat(interfaces)
+    .forEach((from) => inheritClass(NewModel, from));
 
   const {prototype} = NewModel;
 
-  const compileFields = (fields) => forEach(fields, (type, key) => {
-    const value = getValue(prototype, key);
-    if (typeof value === 'function') {
-      defineMethod(
-        prototype,
-        key,
-        createMethod(prototype, key, type, value)
-      );
-    } else {
-      defineGetterSetter(
-        prototype,
-        key,
-        createGetter(prototype, key, type),
-        createSetter(key)
-      );
-    }
-  });
+  const compileFields = (fieldDefs) =>
+    forEach(fieldDefs, (type, key) => {
+      const value = getValue(prototype, key);
+      if (typeof value === 'function') {
+        defineMethod(prototype, key, createMethod(prototype, key, type, value));
+      } else {
+        defineGetterSetter(
+          prototype,
+          key,
+          createGetter(prototype, key, type),
+          createSetter(key),
+        );
+      }
+    });
 
   if (typeof fields === 'function') {
     compileQueue.push(() => compileFields(fields()));
@@ -312,7 +295,6 @@ export const create = (Class, {
   return NewModel;
 };
 
-
 export class Model {
   constructor(data, context = null, parent, root) {
     this._data = data;
@@ -322,7 +304,11 @@ export class Model {
   }
 
   $destroy() {
-    Object.getOwnPropertyNames(this).forEach((key) => delete this[key]);
+    const keys = Object.getOwnPropertyNames(this);
+    const len = keys.length;
+    for (let i = 0; i < len; i += 1) {
+      delete this[keys[i]];
+    }
   }
 
   get $data() {
@@ -348,7 +334,7 @@ export class Model {
   $parentOfType(type) {
     const ParentModel = getModel(type);
     let p = this;
-    while (p = p._parent) {
+    while ((p = p._parent)) {
       if (p instanceof ParentModel) {
         return p;
       }
@@ -362,14 +348,16 @@ export class Model {
 
   $createChildren(model, dataList) {
     const Class = getModel(model);
-    return dataList && dataList.map((data) => createChildModel(this, Class, data));
+    return (
+      dataList &&
+      fastMap(dataList, (data) => createChildModel(this, Class, data))
+    );
   }
 
   $implements(Type) {
     return this.constructor.$interfaces.indexOf(Type) >= 0;
   }
 }
-
 
 export default {
   config,

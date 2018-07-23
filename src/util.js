@@ -1,5 +1,10 @@
 export function forEach(obj, fn) {
-  Object.keys(obj).forEach((key) => fn(obj[key], key, obj));
+  const keys = Object.keys(obj);
+  const len = keys.length;
+  for (let i = 0; i < len; i += 1) {
+    const key = keys[i];
+    fn(obj[key], key, obj);
+  }
 }
 
 export function setProperty(obj, key, value) {
@@ -29,11 +34,12 @@ export function defineMethod(prototype, name, value) {
   });
 }
 
-export function defineLazyProperty(obj, name, fn, {
-  writable = true,
-  enumerable = true,
-  configurable = true,
-} = {}) {
+export function defineLazyProperty(
+  obj,
+  name,
+  fn,
+  {writable = true, enumerable = true, configurable = true} = {},
+) {
   Object.defineProperty(obj, name, {
     get() {
       // Use 'this' instead of obj so that obj can be a prototype.
@@ -52,24 +58,27 @@ export function defineLazyProperty(obj, name, fn, {
 }
 
 let defineClassName;
-if ((() => {
-  const A = class {};
-  try {
-    defineStatic(A, 'name', 'B');
-    return A.name === 'B';
-  } catch (e) {
-    return false;
-  }
-})()) {
+if (
+  (() => {
+    const A = class {};
+    try {
+      defineStatic(A, 'name', 'B');
+      return A.name === 'B';
+    } catch (e) {
+      return false;
+    }
+  })()
+) {
   defineClassName = (Class, value) => defineStatic(Class, 'name', value);
 } else {
   // Old Node versions require the following options to overwrite class name.
-  defineClassName = (Class, value) => Object.defineProperty(Class, 'name', {
-    value,
-    writable: false,
-    enumerable: false,
-    configurable: false,
-  });
+  defineClassName = (Class, value) =>
+    Object.defineProperty(Class, 'name', {
+      value,
+      writable: false,
+      enumerable: false,
+      configurable: false,
+    });
 }
 export {defineClassName};
 
@@ -86,7 +95,7 @@ export function inheritPropertyFrom(objA, objB, key, asKey) {
   return Object.defineProperty(
     objA,
     asKey || key,
-    Object.getOwnPropertyDescriptor(objB, key)
+    Object.getOwnPropertyDescriptor(objB, key),
   );
 }
 
@@ -135,4 +144,13 @@ export function getGetter(obj, key) {
 export function getValue(obj, key) {
   const desc = Object.getOwnPropertyDescriptor(obj, key);
   return desc && desc.value;
+}
+
+export function fastMap(arr, fn, context = null) {
+  const len = arr.length;
+  const mapped = new Array(len);
+  for (let i = 0; i < len; i += 1) {
+    mapped[i] = fn.call(context, arr[i], i, arr);
+  }
+  return mapped;
 }

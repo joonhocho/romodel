@@ -1,25 +1,29 @@
+import {expect} from 'chai';
+import {create, compile, clear, list} from '../lib';
+
 if (typeof Promise === 'undefined') {
   require('es6-promise').polyfill();
 }
-import {expect} from 'chai';
-import {create, compile, clear, list} from '../lib';
 
 describe('Model', () => {
   afterEach(() => clear());
 
-
   it('Basic', () => {
-    const MyModel = create(class MyModel {
-      // define a class method.
-      getId() { return this.id; }
-    }, {
-      // declare directly accessible fields
-      fields: {
-        // declare 'id' field with the default getter.
-        id: true,
+    const MyModel = create(
+      class MyModel {
+        // define a class method.
+        getId() {
+          return this.id;
+        }
       },
-    });
-
+      {
+        // declare directly accessible fields
+        fields: {
+          // declare 'id' field with the default getter.
+          id: true,
+        },
+      },
+    );
 
     const a = new MyModel({id: 1, foo: 'bar'});
 
@@ -32,7 +36,6 @@ describe('Model', () => {
 
     expect(a.$data.id).to.equal(1); // accessible via '$data' method that returns the raw data
 
-
     // Accessing 'foo' value
     expect(a.foo).to.equal(undefined); // not directly accessible since not declared in 'fields'
 
@@ -41,22 +44,30 @@ describe('Model', () => {
     expect(a.$data.foo).to.equal('bar'); // or via '$data'
   });
 
-
   it('Class Methods / Getters / Static', () => {
-    const Plus = create(class Plus {
-      // static
-      static plus1(obj) { return obj.value + 1; }
+    const Plus = create(
+      class Plus {
+        // static
+        static plus1(obj) {
+          return obj.value + 1;
+        }
 
-      // method
-      plus2() { return this.value + 2; }
+        // method
+        plus2() {
+          return this.value + 2;
+        }
 
-      // getter
-      get plus3() { return this.value + 3; }
-    }, {
-      fields: {
-        value: true,
+        // getter
+        get plus3() {
+          return this.value + 3;
+        }
       },
-    });
+      {
+        fields: {
+          value: true,
+        },
+      },
+    );
 
     const a = new Plus({value: 4});
 
@@ -67,45 +78,61 @@ describe('Model', () => {
     expect(a.plus3).to.equal(7); // getter
   });
 
-
   it('Class Inheritance', () => {
-    const ShapeModel = create(class Shape {
-      // a static method
-      static isShape(obj) { return obj instanceof ShapeModel; }
+    const ShapeModel = create(
+      class Shape {
+        // a static method
+        static isShape(obj) {
+          return obj instanceof ShapeModel;
+        }
 
-      // static property to be overriden
-      static classId = 1
+        // static property to be overriden
+        static classId = 1;
 
-      // a method
-      getName() { return this.name; }
+        // a method
+        getName() {
+          return this.name;
+        }
 
-      // method to be overriden
-      getClassName() { return 'Shape'; }
-    }, {
-      fields: {
-        name: true,
+        // method to be overriden
+        getClassName() {
+          return 'Shape';
+        }
       },
-    });
-
-    const ShapeWithColorModel = create(class ShapeWithColor {
-      // add a static property
-      static isShapeWithColor(obj) { return obj instanceof ShapeWithColorModel; }
-
-      // override a static property
-      static classId = 2
-
-      // add new method
-      getColor() { return this.color; }
-
-      // override a method
-      getClassName() { return 'ShapeWithColor'; }
-    }, {
-      base: ShapeModel,
-      fields: {
-        color: true,
+      {
+        fields: {
+          name: true,
+        },
       },
-    });
+    );
 
+    const ShapeWithColorModel = create(
+      class ShapeWithColor {
+        // add a static property
+        static isShapeWithColor(obj) {
+          return obj instanceof ShapeWithColorModel;
+        }
+
+        // override a static property
+        static classId = 2;
+
+        // add new method
+        getColor() {
+          return this.color;
+        }
+
+        // override a method
+        getClassName() {
+          return 'ShapeWithColor';
+        }
+      },
+      {
+        base: ShapeModel,
+        fields: {
+          color: true,
+        },
+      },
+    );
 
     const s = new ShapeModel({name: 'box'});
 
@@ -120,7 +147,6 @@ describe('Model', () => {
     expect(s.name).to.equal('box');
     expect(s.getName()).to.equal('box');
     expect(s.getClassName()).to.equal('Shape');
-
 
     const c = new ShapeWithColorModel({name: 'red box', color: 'red'});
 
@@ -148,25 +174,27 @@ describe('Model', () => {
     expect(c.getClassName()).to.equal('ShapeWithColor');
   });
 
-
   it('Parent / Child', () => {
-    const ChildModel = create(class ChildModel {
-      getName() { return this.name; }
-    }, {
-      fields: {
-        name: true,
+    const ChildModel = create(
+      class ChildModel {
+        getName() {
+          return this.name;
+        }
       },
-    });
+      {
+        fields: {
+          name: true,
+        },
+      },
+    );
 
-    const ParentModel = create(class ParentModel {
-    }, {
+    const ParentModel = create(class ParentModel {}, {
       fields: {
         // declare 'child' field as 'ChildModel'.
         child: ChildModel,
         children: list(ChildModel),
       },
     });
-
 
     const p = new ParentModel({
       child: {name: 'a'},
@@ -183,7 +211,6 @@ describe('Model', () => {
     expect(p.children[0].name).to.equal('b');
     expect(p.children[0].getName()).to.equal('b');
   });
-
 
   it('can pass down optional context', () => {
     const GrandChild = create(class GrandChild {}, {
@@ -212,7 +239,6 @@ describe('Model', () => {
     expect(parent.child.child.$context).to.equal(context);
   });
 
-
   it('passes down a root instance', () => {
     const GrandChild = create(class GrandChild {}, {
       fields: {
@@ -239,7 +265,6 @@ describe('Model', () => {
     expect(parent.child.child.$root).to.equal(parent);
   });
 
-
   it('can create a child that is an instance of itself', () => {
     const Selfie = create(class Selfie {}, {
       fields: {
@@ -251,7 +276,6 @@ describe('Model', () => {
     expect(parent).to.be.an.instanceof(Selfie);
     expect(parent.child).to.be.an.instanceof(Selfie);
   });
-
 
   it('can create a child of future model class', () => {
     const Present = create(class Present {}, {
@@ -281,22 +305,25 @@ describe('Model', () => {
     expect(parent.children[1]).to.be.an.instanceof(Future);
   });
 
-
   it('combines getter and Model', () => {
-    const Parent = create(class Parent {
-      get child() {
-        return {id: this.childId};
-      }
-      get children() {
-        return [{id: this.childId}];
-      }
-    }, {
-      fields: {
-        childId: true,
-        child: 'Child',
-        children: list('Child'),
+    const Parent = create(
+      class Parent {
+        get child() {
+          return {id: this.childId};
+        }
+
+        get children() {
+          return [{id: this.childId}];
+        }
       },
-    });
+      {
+        fields: {
+          childId: true,
+          child: 'Child',
+          children: list('Child'),
+        },
+      },
+    );
 
     const Child = create(class Child {}, {
       fields: {
@@ -312,7 +339,6 @@ describe('Model', () => {
     expect(parent.children[0]).to.be.an.instanceof(Child);
     expect(parent.children[0].id).to.equal(3);
   });
-
 
   it('can transform field value with a mapping function', () => {
     const Simple = create(class Simple {}, {
@@ -336,44 +362,67 @@ describe('Model', () => {
 
     expect(new Simple({bools: null}).bools).to.be.null;
     expect(new Simple({bools: []}).bools).to.eql([]);
-    expect(new Simple({bools: [1, true, 0, false, null, '']}).bools).to.eql([true, true, false, false, false, false]);
+    expect(new Simple({bools: [1, true, 0, false, null, '']}).bools).to.eql([
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+    ]);
 
     expect(new Simple({}).serialized).to.equal(JSON.stringify(undefined));
-    expect(new Simple({serialized: null}).serialized).to.equal(JSON.stringify(null));
-    expect(new Simple({serialized: {a: 1}}).serialized).to.equal(JSON.stringify({a: 1}));
+    expect(new Simple({serialized: null}).serialized).to.equal(
+      JSON.stringify(null),
+    );
+    expect(new Simple({serialized: {a: 1}}).serialized).to.equal(
+      JSON.stringify({a: 1}),
+    );
 
     expect(() => new Simple({}).unserialized).to.throw();
     expect(new Simple({unserialized: null}).unserialized).to.eql(null);
-    expect(new Simple({unserialized: JSON.stringify({a: 1})}).unserialized).to.eql({a: 1});
+    expect(
+      new Simple({unserialized: JSON.stringify({a: 1})}).unserialized,
+    ).to.eql({a: 1});
 
     expect(new Simple({bool: 1, bool2: 0}).bool2).to.eql([true, false]);
-    expect(new Simple({bools: [1, 0], bools2: [0, 1]}).bools2).to.eql([true, false, false, true]);
+    expect(new Simple({bools: [1, 0], bools2: [0, 1]}).bools2).to.eql([
+      true,
+      false,
+      false,
+      true,
+    ]);
   });
 
-
   it('supports mapping functions on methods', (done) => {
-    const Parent = create(class Parent {
-      getChild(add) {
-        return {id: add + this.childId};
-      }
-      getChildren(add) {
-        return [{id: add + this.childId}];
-      }
-      getChildP(add) {
-        return Promise.resolve({id: add + this.childId});
-      }
-      getChildrenP(add) {
-        return Promise.resolve([{id: add + this.childId}]);
-      }
-    }, {
-      fields: {
-        childId: true,
-        getChild: 'Child',
-        getChildren: list('Child'),
-        getChildP: 'Child',
-        getChildrenP: list('Child'),
+    const Parent = create(
+      class Parent {
+        getChild(add) {
+          return {id: add + this.childId};
+        }
+
+        getChildren(add) {
+          return [{id: add + this.childId}];
+        }
+
+        getChildP(add) {
+          return Promise.resolve({id: add + this.childId});
+        }
+
+        getChildrenP(add) {
+          return Promise.resolve([{id: add + this.childId}]);
+        }
       },
-    });
+      {
+        fields: {
+          childId: true,
+          getChild: 'Child',
+          getChildren: list('Child'),
+          getChildP: 'Child',
+          getChildrenP: list('Child'),
+        },
+      },
+    );
 
     const Child = create(class Child {}, {
       fields: {
@@ -407,17 +456,24 @@ describe('Model', () => {
     ]).then(() => done(), done);
   });
 
-
   it('User', () => {
     // Create a Node model
-    const Node = create(class Node {
-      static isNode(obj) { return obj instanceof Node; }
-      get type() { return this.constructor.name; }
-    }, {
-      fields: {
-        id: true,
+    const Node = create(
+      class Node {
+        static isNode(obj) {
+          return obj instanceof Node;
+        }
+
+        get type() {
+          return this.constructor.name;
+        }
       },
-    });
+      {
+        fields: {
+          id: true,
+        },
+      },
+    );
 
     // Create a InfoInterface model
     const InfoInterface = create(class InfoInterface {}, {
@@ -427,28 +483,56 @@ describe('Model', () => {
     });
 
     // Create a InfoBase model
-    const InfoBase = create(class InfoBase {
-      static isInfo = (obj) => obj instanceof InfoBase
-      get user() { return this.$parentOfType('User'); }
-      isSharedWith(user) { return this.user.isFriendsWith(user); }
-    });
+    const InfoBase = create(
+      class InfoBase {
+        static isInfo = (obj) => obj instanceof InfoBase;
+
+        get user() {
+          return this.$parentOfType('User');
+        }
+
+        isSharedWith(user) {
+          return this.user.isFriendsWith(user);
+        }
+      },
+    );
 
     // Create a Name model
-    const NameModel = create(class Name {
-      static isName(obj) { return obj instanceof NameModel; }
-      getFirstAndLastName() { return [this.firstName, this.lastName]; }
-      get shortName() { return `${this.firstName} ${this.lastName}`; }
-      get profile() { return this.$parent; }
-      get profile2() { return this.$parentOfType(Profile); }
-      get profile3() { return this.$parentOfType('Profile'); }
-    }, {
-      base: InfoBase,
-      interfaces: [Node, InfoInterface],
-      fields: {
-        firstName: true,
-        lastName: true,
+    const NameModel = create(
+      class Name {
+        static isName(obj) {
+          return obj instanceof NameModel;
+        }
+
+        getFirstAndLastName() {
+          return [this.firstName, this.lastName];
+        }
+
+        get shortName() {
+          return `${this.firstName} ${this.lastName}`;
+        }
+
+        get profile() {
+          return this.$parent;
+        }
+
+        get profile2() {
+          return this.$parentOfType(Profile);
+        }
+
+        get profile3() {
+          return this.$parentOfType('Profile');
+        }
       },
-    });
+      {
+        base: InfoBase,
+        interfaces: [Node, InfoInterface],
+        fields: {
+          firstName: true,
+          lastName: true,
+        },
+      },
+    );
 
     // Create a Profile model
     const Profile = create(class Profile {}, {
@@ -458,20 +542,23 @@ describe('Model', () => {
     });
 
     // Create a User model
-    const User = create(class User {
-      get friends() {
-        return this.$get('friendIds').map((id) => ({id}));
-      }
-      isFriendsWith(user) {
-        return this.$get('friendIds').indexOf(user.id) > -1;
-      }
-    }, {
-      interfaces: [Node],
-      fields: {
-        profile: Profile,
-      },
-    });
+    const User = create(
+      class User {
+        get friends() {
+          return this.$get('friendIds').map((id) => ({id}));
+        }
 
+        isFriendsWith(user) {
+          return this.$get('friendIds').indexOf(user.id) > -1;
+        }
+      },
+      {
+        interfaces: [Node],
+        fields: {
+          profile: Profile,
+        },
+      },
+    );
 
     // Create a user instance
     const user = new User({
@@ -482,7 +569,6 @@ describe('Model', () => {
       friendIds: ['2', '4'],
       hiddenField: 1,
     });
-
 
     // static declared by interface Node
     expect(user.id).to.equal('1');
@@ -523,7 +609,6 @@ describe('Model', () => {
     expect(user.isFriendsWith({id: '2'})).to.be.true;
     expect(user.isFriendsWith({id: '1'})).to.be.false;
 
-
     // instance field
     const {profile} = user;
     expect(profile).to.be.an.instanceof(Profile);
@@ -531,9 +616,10 @@ describe('Model', () => {
     // cached
     expect(profile).to.equal(user.profile);
 
-
     // instance list field
-    const {names: [name]} = profile;
+    const {
+      names: [name],
+    } = profile;
     expect(name.constructor).to.equal(NameModel);
     expect(name).to.be.an.instanceof(NameModel);
 
@@ -607,31 +693,33 @@ describe('Model', () => {
     expect(user.$parent).to.be.undefined;
   });
 
-
   it('can handle promise value', (done) => {
-    const Value = create(class Value {
-    }, {
+    const Value = create(class Value {}, {
       fields: {
         v: true,
       },
     });
 
-    const Model = create(class Model {
-      get pValue() {
-        return Promise.resolve({v: 1});
-      }
-      get pValues() {
-        return Promise.resolve([{v: 1}, {v: 2}]);
-      }
-    }, {
-      fields: {
-        pValue: [Value],
-        pValues: {
-          map: [Value],
-          list: true,
+    const Model = create(
+      class Model {
+        get pValue() {
+          return Promise.resolve({v: 1});
+        }
+
+        get pValues() {
+          return Promise.resolve([{v: 1}, {v: 2}]);
+        }
+      },
+      {
+        fields: {
+          pValue: [Value],
+          pValues: {
+            map: [Value],
+            list: true,
+          },
         },
       },
-    });
+    );
 
     const model = new Model({});
 
@@ -652,23 +740,23 @@ describe('Model', () => {
   });
 
   it('Parent / Child with delayed compile for circular references', () => {
-    const Parent = create(class P1 {
-    }, {
+    const Parent = create(class P1 {}, {
       fields: () => ({
         child: Child,
       }),
     });
 
-    const Child = create(class C1 {
-    }, {
+    const Child = create(class C1 {}, {
       fields: () => ({
         parent: Parent,
       }),
     });
 
-    const p = new Parent({child: {
-      parent: {child: {}},
-    }});
+    const p = new Parent({
+      child: {
+        parent: {child: {}},
+      },
+    });
 
     expect(p).to.be.an.instanceof(Parent);
     expect(p.child).to.not.be.an.instanceof(Child);
