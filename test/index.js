@@ -2,7 +2,7 @@ if (typeof Promise === 'undefined') {
   require('es6-promise').polyfill();
 }
 import {expect} from 'chai';
-import {create, clear, list} from '../lib';
+import {create, compile, clear, list} from '../lib';
 
 describe('Model', () => {
   afterEach(() => clear());
@@ -321,10 +321,10 @@ describe('Model', () => {
         bools: list(Boolean),
         serialized: JSON.stringify,
         unserialized: JSON.parse,
-        bool2: function(bool2) {
+        bool2(bool2) {
           return [this.bool, Boolean(bool2)];
         },
-        bools2: function(bools2) {
+        bools2(bools2) {
           return this.bools.concat(bools2.map(Boolean));
         },
       },
@@ -340,11 +340,11 @@ describe('Model', () => {
 
     expect(new Simple({}).serialized).to.equal(JSON.stringify(undefined));
     expect(new Simple({serialized: null}).serialized).to.equal(JSON.stringify(null));
-    expect(new Simple({serialized: {'a': 1}}).serialized).to.equal(JSON.stringify({'a': 1}));
+    expect(new Simple({serialized: {a: 1}}).serialized).to.equal(JSON.stringify({a: 1}));
 
     expect(() => new Simple({}).unserialized).to.throw();
     expect(new Simple({unserialized: null}).unserialized).to.eql(null);
-    expect(new Simple({unserialized: JSON.stringify({'a': 1})}).unserialized).to.eql({'a': 1});
+    expect(new Simple({unserialized: JSON.stringify({a: 1})}).unserialized).to.eql({a: 1});
 
     expect(new Simple({bool: 1, bool2: 0}).bool2).to.eql([true, false]);
     expect(new Simple({bools: [1, 0], bools2: [0, 1]}).bools2).to.eql([true, false, false, true]);
@@ -649,5 +649,35 @@ describe('Model', () => {
         expect(b.v).to.equal(2);
       }),
     ]).then(() => done(), done);
+  });
+
+  it('Parent / Child with delayed compile for circular references', () => {
+    const Parent = create(class P1 {
+    }, {
+      fields: () => ({
+        child: Child,
+      }),
+    });
+
+    const Child = create(class C1 {
+    }, {
+      fields: () => ({
+        parent: Parent,
+      }),
+    });
+
+    const p = new Parent({child: {
+      parent: {child: {}},
+    }});
+
+    expect(p).to.be.an.instanceof(Parent);
+    expect(p.child).to.not.be.an.instanceof(Child);
+
+    compile();
+
+    expect(p.child).to.be.an.instanceof(Child);
+    expect(p.child.parent).to.be.an.instanceof(Parent);
+    expect(p.child.parent.child).to.be.an.instanceof(Child);
+    expect(p.child.parent.child.parent).to.be.undefined;
   });
 });

@@ -133,7 +133,7 @@ const createMapContextForSingleFunction = (fn) => {
 const createMapContextForMultipleFunctions = (fns) => {
   fns.forEach((fn, i) => fns[i] = updateMappingFunction(fns, i, fn));
   return {
-    map: function(data) {
+    map(data) {
       return fns.reduce((x, fn) => fn.call(this, x), data);
     },
   };
@@ -153,7 +153,7 @@ const createMapContext = (fns) => {
 
 
 const createGetterWithMapForList = (key, getter, context) => function get() {
-  let val = getter.call(this);
+  const val = getter.call(this);
   if (val) {
     return mapPromise(val, (v) => v.map(context.map, this));
   }
@@ -174,7 +174,7 @@ const createGetterWithCache = (key, getter) => function get() {
 
 
 const createMethodWithMapForList = (key, method, context) => function() {
-  let val = method.apply(this, arguments);
+  const val = method.apply(this, arguments);
   if (val) {
     return mapPromise(val, (v) => v.map(context.map, this));
   }
@@ -188,7 +188,7 @@ const createMethodWithMapForNonList = (key, method, context) => function() {
 
 
 const createGetter = (prototype, key, type) => {
-  let {
+  const {
     map: fns,
     list = false,
     cache = defaultCache,
@@ -219,7 +219,7 @@ const createGetter = (prototype, key, type) => {
 
 
 const createMethod = (prototype, key, type, method) => {
-  let {
+  const {
     map: fns,
     list = false,
   } = normalizeFieldType(type);
@@ -241,6 +241,15 @@ export const config = (obj) => {
   if (obj.cache !== undefined) defaultCache = Boolean(obj.cache);
 };
 
+const compileQueue = [];
+
+export const compile = () => {
+  const len = compileQueue.length;
+  for (let i = 0; i < len; i += 1) {
+    compileQueue[i]();
+  }
+  compileQueue.length = 0;
+};
 
 export const list = (x) => ({
   ...normalizeFieldType(x),
@@ -272,11 +281,11 @@ export const create = (Class, {
   defineStatic(NewModel, '$interfaces', interfaces);
 
   [Class, Base].concat(interfaces).forEach((from) =>
-      inheritClass(NewModel, from));
+    inheritClass(NewModel, from));
 
   const {prototype} = NewModel;
 
-  forEach(fields, (type, key) => {
+  const compileFields = (fields) => forEach(fields, (type, key) => {
     const value = getValue(prototype, key);
     if (typeof value === 'function') {
       defineMethod(
@@ -293,6 +302,12 @@ export const create = (Class, {
       );
     }
   });
+
+  if (typeof fields === 'function') {
+    compileQueue.push(() => compileFields(fields()));
+  } else {
+    compileFields(fields);
+  }
 
   return NewModel;
 };
@@ -358,6 +373,7 @@ export class Model {
 
 export default {
   config,
+  compile,
   list,
   create,
   get,
